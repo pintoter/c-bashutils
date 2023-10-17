@@ -1,0 +1,124 @@
+#include "s21_cat.h"
+
+int main(int argc, char *argv[]) {
+    size_t size;
+    options opt_cat = {0};
+    char *short_options = "+benstvET";
+    struct option long_options[] = {{"number-nonblank", no_argument, NULL, 'b'},
+                                    {"number", no_argument, NULL, 'n'},
+                                    {"squeeze-blank", no_argument, NULL, 's'},
+                                    {NULL, 0, NULL, 0}};
+    setlocale(LC_CTYPE, "");
+    int flag = parse_flag(argc, argv, short_options, long_options, &opt_cat);
+    if (flag == 0) {
+        fprintf(stderr, "s21_cat: illegal option -%s\n", argv[optind - 1]);
+    } else {
+        for (int i = optind; i < argc; i++) {
+            FILE *file = fopen(argv[i], "r");
+            if (file == NULL) {
+                fprintf(stderr, "s21_cat: %s: No such file or directory\n", argv[i]);
+            } else {
+                int *text = read_file(file, &size);
+                print_text(text, opt_cat, size);
+                free(text);
+                fclose(file);
+            }
+        }
+    }
+    return 0;
+}
+
+int parse_flag(int argc, char *argv[], char *short_options, struct option long_options[], options *opt_cat) {
+    int flag = 1;
+    opterr = 0;
+    int res;
+    while ((flag && (res = getopt_long(argc, argv, short_options, long_options, NULL)) != -1)) {
+        switch (res) {
+            case 'b':
+                (*opt_cat).b = 1;
+                break;
+            case 'e':
+                (*opt_cat).e = 1;
+                (*opt_cat).v = 1;
+                break;
+            case 'n':
+                (*opt_cat).n = 1;
+                break;
+            case 's':
+                (*opt_cat).s = 1;
+                break;
+            case 't':
+                (*opt_cat).t = 1;
+                (*opt_cat).v = 1;
+                break;
+            case 'v':
+                (*opt_cat).v = 1;
+                break;
+            case 'E':
+                (*opt_cat).e = 1;
+                break;
+            case 'T':
+                (*opt_cat).t = 1;
+                break;
+            case '?':
+            default:
+                flag = 0;
+                break;
+        }
+    }
+    return flag;
+}
+
+int *read_file(FILE *file, size_t *size) {
+    size_t size_text = 10;
+    int *text = (int *)malloc(size_text * sizeof(int));
+    int c = ' ';
+    *size = 0;
+    for (size_t i = 0; c != EOF; i++) {
+        c = fgetc(file);
+        if (i >= size_text - 1) {
+            size_text *= 1.5;
+            text = (int *)realloc(text, size_text * sizeof(int));
+        }
+        if (c == EOF) {
+            text[i] = 0;
+        } else {
+            text[i] = c;
+        }
+        *size += 1;
+    }
+    return text;
+}
+
+void print_text(int *buffer, options opt_cat, size_t size) {
+    int count = 1;
+    for (size_t i = 0; i < size - 1; i++) {
+        if ((i == 0 || buffer[i - 1] == '\n') &&
+            ((opt_cat.b && buffer[i] != '\n') || (opt_cat.n && !opt_cat.b))) {
+            printf("%6d\t", count++);
+        }
+        if (opt_cat.s) {
+            while ((i == 0 || buffer[i - 1] == '\n') && buffer[i] == '\n' && buffer[i + 1] == '\n') {
+                i++;
+            }
+        }
+        if (opt_cat.t && buffer[i] == '\t') {
+            printf("^I");
+            continue;
+        }
+        if (opt_cat.e && buffer[i] == '\n') {
+            printf("$");
+        }
+        if (opt_cat.v) {
+            if (!isascii(buffer[i]) && !isprint(buffer[i])) {
+                printf("M-");
+                buffer[i] = toascii(buffer[i]);
+            }
+            if (iscntrl(buffer[i]) && buffer[i] != '\n' && buffer[i] != '\t') {
+                printf("^%c", buffer[i] == '\177' ? '?' : buffer[i] | 0100);
+                continue;
+            }
+        }
+        printf("%c", buffer[i]);
+    }
+}
